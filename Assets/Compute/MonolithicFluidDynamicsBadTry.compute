@@ -1,0 +1,127 @@
+﻿
+#pragma kernel MLDBadtry
+
+// saturation, permeability, temperature, airdensity, airpollution, airpermeability, landfertility, extra
+struct flowPoint
+{
+	float saturation;
+	float permeability;
+	float temperature;
+	float airDensity;
+	float airPollution;
+	float airPermeability;
+	float landFertility;
+	float extra;
+};
+
+uniform RWStructuredBuffer<flowPoint> flowOutBuffer : register(u0);
+uniform StructuredBuffer<flowPoint> flowInBuffer : register(t0);
+
+//getIndex specifically written for the 34x34x34 buffers.
+int gI(uint x, uint y, uint z)
+{
+	return (x % 34) + (y * 34) + (z * 34 * 34);
+}
+
+
+[numthreads(1,34,1)]
+void MLDBadtry(uint3 id : SV_DispatchThreadID)
+{
+	if (id.x > 0 && id.y > 0 && id.z > 0 && id.x < 33 && id.y < 33 && id.z < 33)
+	{
+		float sat = flowInBuffer[gI(id.x, id.y, id.z)].saturation;
+		float perm = flowInBuffer[gI(id.x, id.y, id.z)].permeability;
+		float xpSat = flowInBuffer[gI(id.x + 1, id.y, id.z)].saturation;
+		float xnSat = flowInBuffer[gI(id.x - 1, id.y, id.z)].saturation;
+		float ypSat = flowInBuffer[gI(id.x, id.y + 1, id.z)].saturation;
+		float ynSat = flowInBuffer[gI(id.x, id.y - 1, id.z)].saturation;
+		float zpSat = flowInBuffer[gI(id.x, id.y, id.z + 1)].saturation;
+		float znSat = flowInBuffer[gI(id.x, id.y, id.z - 1)].saturation;
+		float xpPerm = flowInBuffer[gI(id.x + 1, id.y, id.z)].permeability;
+		float xnPerm = flowInBuffer[gI(id.x - 1, id.y, id.z)].permeability;
+		float ypPerm = flowInBuffer[gI(id.x, id.y + 1, id.z)].permeability;
+		float ynPerm = flowInBuffer[gI(id.x, id.y - 1, id.z)].permeability;
+		float zpPerm = flowInBuffer[gI(id.x, id.y, id.z + 1)].permeability;
+		float znPerm = flowInBuffer[gI(id.x, id.y, id.z - 1)].permeability;
+
+		//our upward flow plus the downward flow of the one above
+		float upFlow = (max(0, sat - 1) - ypSat) * perm * ypPerm;
+		//lower upward flow plus our downward flow
+		float downFlow = (sat - max(0, ynSat - 1)) * perm * ynPerm;
+
+
+		flowOutBuffer[gI(id.x, id.y, id.z)].saturation = max(0,(sat - upFlow) - downFlow);
+		//flowOutBuffer[gI(id.x, id.y + 1, id.z)].saturation = flowInBuffer[gI(id.x, id.y + 1, id.z)].saturation + upFlow;
+		//flowOutBuffer[gI(id.x, id.y - 1, id.z)].saturation = flowInBuffer[gI(id.x, id.y - 1, id.z)].saturation + downFlow; 
+
+	}
+	//float xpSat = 0;
+	//float xnSat = 0;
+	//float ypSat = 0;
+	//float ynSat = 0;
+	//float zpSat = 0;
+	//float znSat = 0;
+	/*
+	float thisPerm = flowInBuffer[gI(id.x, id.y, id.z)].permeability;
+	flowOutBuffer[gI(id.x, id.y, id.z)].permeability = thisPerm;
+	const float speed = 0.2;
+	
+	if (id.y > 0)
+	{
+		float downPerm = flowInBuffer[gI(id.x, id.y - 1, id.z)].permeability;
+		float ynSat = flowInBuffer[gI(id.x, id.y - 1, id.z)].saturation;
+		float pushUp = min(1, thisPerm * downPerm * max(0, (ynSat - 1.0)*ynSat));
+		float downFlow = min(1,max(0,thisPerm * downPerm * newSat));
+		flowOutBuffer[gI(id.x, id.y, id.z)].saturation -= (downFlow - pushUp)*speed;
+		flowOutBuffer[gI(id.x, id.y - 1, id.z)].saturation += (downFlow - pushUp)*speed;
+	}
+
+	if (id.y < 33)
+	{
+		float upPerm = flowInBuffer[gI(id.x, id.y + 1, id.z)].permeability;
+		float ypSat = flowInBuffer[gI(id.x, id.y + 1, id.z)].saturation;
+		float pushUp = min(1, thisPerm * upPerm * max(0, (flowOutBuffer[gI(id.x, id.y, id.z)].saturation - 1.0)*flowOutBuffer[gI(id.x, id.y, id.z)].saturation));
+		float downFlow = min(1,max(0,thisPerm * upPerm * ypSat));
+		flowOutBuffer[gI(id.x, id.y, id.z)].saturation += (downFlow - pushUp)*speed;
+		flowOutBuffer[gI(id.x, id.y + 1, id.z)].saturation -= (downFlow - pushUp)*speed;
+	}
+	
+	if (id.x < 33)
+	{
+		float flow = (flowInBuffer[gI(id.x, id.y, id.z)].saturation - flowInBuffer[gI(id.x + 1, id.y, id.z)].saturation)*
+			flowInBuffer[gI(id.x, id.y, id.z)].permeability * flowInBuffer[gI(id.x + 1, id.y, id.z)].permeability;		
+		flowOutBuffer[gI(id.x, id.y, id.z)].saturation = max(0, flowOutBuffer[gI(id.x, id.y, id.z)].saturation - (flow * speed));
+		//flowOutBuffer[gI(id.x + 1, id.y, id.z)].saturation += flow * speed;
+	}
+	
+	if (id.x > 0)
+	{
+		float flow = (flowInBuffer[gI(id.x, id.y, id.z)].saturation - flowInBuffer[gI(id.x - 1, id.y, id.z)].saturation)*
+			flowInBuffer[gI(id.x, id.y, id.z)].permeability * flowInBuffer[gI(id.x - 1, id.y, id.z)].permeability;
+		flowOutBuffer[gI(id.x, id.y, id.z)].saturation = max(0, flowOutBuffer[gI(id.x, id.y, id.z)].saturation - (flow * speed));
+		//flowOutBuffer[gI(id.x - 1, id.y, id.z)].saturation += flow * speed;
+	}
+
+	if (id.z < 33)
+	{
+		float flow = (flowInBuffer[gI(id.x, id.y, id.z)].saturation - flowInBuffer[gI(id.x, id.y, id.z + 1)].saturation)*
+			flowInBuffer[gI(id.x, id.y, id.z)].permeability * flowInBuffer[gI(id.x, id.y, id.z + 1)].permeability;
+		flowOutBuffer[gI(id.x, id.y, id.z)].saturation = max(0, flowOutBuffer[gI(id.x, id.y, id.z)].saturation - (flow * speed));
+		//flowOutBuffer[gI(id.x, id.y, id.z + 1)].saturation += flow * speed;
+	}
+
+	if (id.z > 0)
+	{
+		float flow = (flowInBuffer[gI(id.x, id.y, id.z)].saturation - flowInBuffer[gI(id.x, id.y, id.z - 1)].saturation)*
+			flowInBuffer[gI(id.x, id.y, id.z)].permeability * flowInBuffer[gI(id.x, id.y, id.z - 1)].permeability;
+		flowOutBuffer[gI(id.x, id.y, id.z)].saturation = max(0, flowOutBuffer[gI(id.x, id.y, id.z)].saturation - (flow * speed));
+		//flowOutBuffer[gI(id.x, id.y, id.z - 1)].saturation += flow * speed;
+	}
+	
+	
+	flowOutBuffer[gI(id.x, id.y, id.z)].saturation = max(0, flowOutBuffer[gI(id.x, id.y, id.z)].saturation);
+	flowOutBuffer[gI(id.x, id.y, id.z)].permeability = flowInBuffer[gI(id.x, id.y, id.z)].permeability;
+	*/
+
+	
+}
