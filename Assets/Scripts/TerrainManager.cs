@@ -102,7 +102,7 @@ public class TerrainManager{
                 
             }
         }
-
+        /*
         Chunk c = getChunkByGrid(new Vector3Int(lastUpdateTestX, lastUpdateTestY, lastUpdateTestZ));
         if(c!=null)
         {
@@ -118,7 +118,7 @@ public class TerrainManager{
 					}
 				}
 			}
-        }
+        }*/
     }
 
     public void doUpdate()
